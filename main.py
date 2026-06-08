@@ -18,7 +18,7 @@ detected_name = "감지 안 됨"
 coord_x = 0
 coord_y = 0
 
-# 사물 분류 ID 매핑 테이블
+# 사물 분류 ID 매핑 테이블 (학생의 6가지 사물 그대로 적용)
 object_map = {
     1: "사과",
     2: "자동차",
@@ -29,189 +29,456 @@ object_map = {
 }
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# [검증 웹사이트 HTML 템플릿]
+# [대폭 업그레이드된 게임 및 검증 웹사이트 HTML 템플릿]
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>👁️ 당곡고 허스키렌즈 Wi-Fi 검증 센터</title>
+    <title>🎮 당곡고 AI 드로잉 챌린지</title>
     <style>
         body {
             font-family: 'Malgun Gothic', -apple-system, sans-serif;
-            background-color: #f0f4f8;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
             margin: 0;
             padding: 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 90vh;
+            min-height: 95vh;
+            color: #333;
         }
         .container {
-            max-width: 480px;
+            max-width: 500px;
             width: 100%;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 24px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
             padding: 30px;
             box-sizing: border-box;
             text-align: center;
+            backdrop-filter: blur(10px);
         }
         h1 {
-            color: #1a73e8;
-            font-size: 1.8rem;
-            margin-bottom: 5px;
+            color: #1e3c72;
+            font-size: 2.2rem;
+            margin: 0 0 5px 0;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
         }
         .subtitle {
-            color: #5f6368;
-            font-size: 0.9rem;
+            color: #666;
+            font-size: 0.95rem;
             margin-bottom: 25px;
+            font-weight: bold;
         }
-        .card {
+        
+        /* 메인 게임 보드 패널 */
+        .game-card {
             background-color: #f8f9fa;
-            border: 2px solid #e8eaed;
-            border-radius: 15px;
+            border: 4px solid #1e3c72;
+            border-radius: 20px;
             padding: 25px;
             margin-bottom: 20px;
-            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
-        .card.active {
-            background-color: #e8f0fe;
-            border-color: #1a73e8;
+        .game-card.playing {
+            border-color: #e67e22;
+            background-color: #fdfaf6;
         }
-        .indicator {
+        .game-card.solved {
+            border-color: #2ecc71;
+            background-color: #ebfaf0;
+            box-shadow: 0 0 20px rgba(46, 204, 113, 0.5);
+        }
+        .game-card.gameover {
+            border-color: #e74c3c;
+            background-color: #fdf5f5;
+        }
+
+        .status-badge {
             display: inline-block;
-            width: 12px;
-            height: 12px;
-            background-color: #dadce0;
-            border-radius: 50%;
-            margin-right: 8px;
+            background: #1e3c72;
+            color: white;
+            padding: 6px 15px;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            margin-bottom: 15px;
         }
-        .indicator.active {
-            background-color: #34a853;
-            box-shadow: 0 0 8px #34a853;
-        }
-        .status-header {
+        .game-card.solved .status-badge { background: #2ecc71; }
+        .game-card.playing .status-badge { background: #e67e22; }
+        .game-card.gameover .status-badge { background: #e74c3c; }
+
+        /* 룰렛 단어 영역 */
+        .quiz-word {
+            font-size: 3.5rem;
+            font-weight: 900;
+            color: #2c3e50;
+            margin: 15px 0;
+            min-height: 80px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: bold;
-            color: #5f6368;
-            font-size: 0.95rem;
+            transition: transform 0.1s ease;
         }
-        .object-name {
-            font-size: 2.8rem;
-            font-weight: 800;
-            color: #202124;
-            margin: 20px 0;
+        .quiz-word.rolling {
+            animation: shake 0.1s infinite;
+            color: #7f8c8d;
         }
-        .info-grid {
+        
+        /* 정보 그리드 */
+        .stats-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            text-align: left;
+            gap: 15px;
+            margin-bottom: 25px;
         }
-        .info-box {
-            background-color: #f1f3f4;
+        .stat-box {
+            background: #f1f3f5;
+            border-radius: 14px;
             padding: 12px;
-            border-radius: 8px;
+            border: 1px solid #dee2e6;
         }
-        .info-label {
-            font-size: 0.75rem;
-            color: #5f6368;
-            margin-bottom: 4px;
-        }
-        .info-value {
-            font-size: 1.1rem;
-            font-weight: bold;
-            color: #202124;
-        }
-        .footer {
-            margin-top: 25px;
+        .stat-label {
             font-size: 0.8rem;
-            color: #9aa0a6;
+            color: #666;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #1e3c72;
+        }
+        
+        /* 타이머 프로그레스 바 */
+        .timer-container {
+            width: 100%;
+            height: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            margin-bottom: 25px;
+            overflow: hidden;
+        }
+        .timer-bar {
+            height: 100%;
+            width: 100%;
+            background-color: #e67e22;
+            transition: width 1s linear, background-color 0.5s;
+            border-radius: 5px;
+        }
+
+        /* 컨트롤 버튼들 */
+        .btn {
+            background-color: #1e3c72;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            font-size: 1.15rem;
+            font-weight: bold;
+            border-radius: 12px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s;
+            box-shadow: 0 4px 10px rgba(30, 60, 114, 0.3);
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(30, 60, 114, 0.4);
+        }
+        .btn:active {
+            transform: translateY(1px);
+        }
+        .btn-next {
+            background-color: #2ecc71;
+            box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
+        }
+        .btn-next:hover {
+            background-color: #27ae60;
+            box-shadow: 0 6px 15px rgba(46, 204, 113, 0.4);
+        }
+        
+        .realtime-text {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            margin-top: 15px;
+            font-style: italic;
+        }
+
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -1px) rotate(-1deg); }
+            20% { transform: translate(-2px, 0px) rotate(1deg); }
+            30% { transform: translate(0px, 1px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 1px) rotate(-1deg); }
+            60% { transform: translate(-2px, -1px) rotate(0deg); }
+            70% { transform: translate(1px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(2px, 1px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>👁️ 허스키렌즈 검증 센터</h1>
-    <div class="subtitle">실시간 와이파이 센서 감지 모니터링</div>
+    <h1>🎨 AI 드로잉 챌린지</h1>
+    <div class="subtitle">당곡고등학교 하드웨어-AI 융합 부스</div>
 
-    <div class="card" id="statusCard">
-        <div class="status-header">
-            <span class="indicator" id="statusIndicator"></span>
-            <span id="statusText">탐색 중...</span>
-        </div>
-        <div class="object-name" id="objectName">대기 중</div>
+    <!-- 타이머 바 -->
+    <div class="timer-container">
+        <div id="timerBar" class="timer-bar"></div>
     </div>
 
-    <div class="info-grid">
-        <div class="info-box">
-            <div class="info-label">학습 ID</div>
-            <div class="info-value" id="idVal">-</div>
+    <!-- 메인 게임 카드 -->
+    <div id="gameCard" class="game-card">
+        <div id="statusBadge" class="status-badge">대기 중</div>
+        <div id="quizWord" class="quiz-word">START 버튼을 눌러요!</div>
+        <div id="realtimeSensor" class="realtime-text">허스키렌즈 연결 상태를 확인해주세요.</div>
+    </div>
+
+    <!-- 상태 정보 보드 -->
+    <div class="stats-grid">
+        <div class="stat-box">
+            <div class="stat-label">현재 점수</div>
+            <div class="stat-value" id="scoreVal">0</div>
         </div>
-        <div class="info-box">
-            <div class="info-label">업데이트 주기</div>
-            <div class="info-value">300ms</div>
-        </div>
-        <div class="info-box">
-            <div class="info-label">중심 X 좌표</div>
-            <div class="info-value" id="xVal">-</div>
-        </div>
-        <div class="info-box">
-            <div class="info-label">중심 Y 좌표</div>
-            <div class="info-value" id="yVal">-</div>
+        <div class="stat-box">
+            <div class="stat-label">남은 시간</div>
+            <div class="stat-value" id="timeVal">60초</div>
         </div>
     </div>
 
-    <div class="footer">
-        당곡고등학교 하드웨어-AI 실습 프로젝트
-    </div>
+    <!-- 컨트롤 버튼 -->
+    <button id="actionBtn" class="btn">게임 시작 🎮</button>
 </div>
 
 <script>
-    // 0.3초마다 피코 2 서버에 비동기(AJAX) 요청을 보내 상태를 갱신합니다.
+    // 6가지 정답 사물 목록
+    const items = [
+        { id: 1, name: "사과 🍎" },
+        { id: 2, name: "자동차 🚗" },
+        { id: 3, name: "별 ⭐" },
+        { id: 4, name: "우산 ☂️" },
+        { id: 5, name: "의자 🪑" },
+        { id: 6, name: "핸드폰 📱" }
+    ];
+
+    // 게임 상태 변수
+    let currentTarget = null;
+    let score = 0;
+    let timeLeft = 60;
+    let totalTimeLimit = 60;
+    let timerInterval = null;
+    let gameState = "IDLE"; // IDLE, ROULETTE, PLAYING, SOLVED, GAMEOVER
+    let pollInterval = null;
+
+    const gameCard = document.getElementById("gameCard");
+    const statusBadge = document.getElementById("statusBadge");
+    const quizWord = document.getElementById("quizWord");
+    const realtimeSensor = document.getElementById("realtimeSensor");
+    const scoreVal = document.getElementById("scoreVal");
+    const timeVal = document.getElementById("timeVal");
+    const timerBar = document.getElementById("timerBar");
+    const actionBtn = document.getElementById("actionBtn");
+
+    // 가상 오디오 재생기 (효과음)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playSound(freq, type, duration, delay=0) {
+        setTimeout(() => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }, delay);
+    }
+
+    // 룰렛 회전 효과음 (짧게 째깍째깍)
+    function playTickSound() {
+        playSound(800, "triangle", 0.05);
+    }
+
+    // 정답 팡파르 효과음 ("따단~" 쾌감 업!)
+    function playTadaSound() {
+        playSound(523.25, "sine", 0.15, 0);      // 도 (C5)
+        playSound(659.25, "sine", 0.15, 120);    // 미 (E5)
+        playSound(783.99, "sine", 0.3, 240);     // 솔 (G5)
+        playSound(1046.50, "sine", 0.5, 360);    // 도 (C6)
+    }
+
+    // 타임아웃 삐 소리
+    function playGameOverSound() {
+        playSound(330, "sawtooth", 0.3, 0);
+        playSound(220, "sawtooth", 0.6, 300);
+    }
+
+    // 버튼 클릭 이벤트 리스너
+    actionBtn.addEventListener("click", () => {
+        if (gameState === "IDLE" || gameState === "GAMEOVER") {
+            startGame();
+        } else if (gameState === "SOLVED") {
+            triggerRoulette();
+        }
+    });
+
+    // 1. 게임 전반 시동 함수
+    function startGame() {
+        score = 0;
+        timeLeft = totalTimeLimit;
+        scoreVal.textContent = score;
+        timeVal.textContent = timeLeft + "초";
+        timerBar.style.width = "100%";
+        timerBar.style.backgroundColor = "#e67e22";
+        
+        triggerRoulette(); // 첫 문제 선택 룰렛 시동
+        
+        // 피코 데이터 수신 센서 루프 시작
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(fetchSensorData, 300);
+    }
+
+    // 2. 랜덤 돌림판 애니메이션 (도로로로 굴러가기)
+    function triggerRoulette() {
+        gameState = "ROULETTE";
+        gameCard.className = "game-card"; // 기본 클래스로 변경
+        statusBadge.textContent = "돌림판 선택 중";
+        quizWord.classList.add("rolling");
+        actionBtn.disabled = true;
+        actionBtn.textContent = "문제를 고르는 중...";
+
+        let spinDuration = 1600; // 1.6초간 돌림판 작동
+        let tickInterval = 80;
+        let elapsed = 0;
+        let lastIdx = -1;
+
+        let spinTimer = setInterval(() => {
+            let randIdx;
+            do {
+                randIdx = Math.floor(Math.random() * items.length);
+            } while (randIdx === lastIdx);
+            
+            lastIdx = randIdx;
+            quizWord.textContent = items[randIdx].name;
+            playTickSound(); // 째깍 효과음 재생
+            elapsed += tickInterval;
+
+            if (elapsed >= spinDuration) {
+                clearInterval(spinTimer);
+                
+                // 새로운 문제 확정 (직전 문제와 겹치지 않게)
+                let finalTarget;
+                do {
+                    finalTarget = items[Math.floor(Math.random() * items.length)];
+                } while (currentTarget && finalTarget.id === currentTarget.id);
+
+                currentTarget = finalTarget;
+                quizWord.textContent = currentTarget.name;
+                quizWord.classList.remove("rolling");
+                
+                // 본격 플레이 모드 돌입
+                gameState = "PLAYING";
+                gameCard.className = "game-card playing";
+                statusBadge.textContent = "사물을 그리세요!";
+                actionBtn.textContent = "그림 그리는 중...";
+                actionBtn.className = "btn";
+                actionBtn.disabled = true;
+
+                // 타이머 시동 (한 번만 세팅)
+                if (!timerInterval) {
+                    startGlobalTimer();
+                }
+            }
+        }, tickInterval);
+    }
+
+    // 3. 1초마다 작동하는 글로벌 제한시간 감소 함수
+    function startGlobalTimer() {
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (gameState === "PLAYING") { // 정답 고정 상태나 룰렛 중에는 시간 차감 일시 정지!
+                timeLeft--;
+                timeVal.textContent = timeLeft + "초";
+                
+                let percent = (timeLeft / totalTimeLimit) * 100;
+                timerBar.style.width = percent + "%";
+                
+                if (timeLeft <= 10) {
+                    timerBar.style.backgroundColor = "#e74c3c"; // 10초 미만일 땐 빨간 경고색
+                }
+
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }
+        }, 1000);
+    }
+
+    // 4. 피코 2 WH 로부터 센서 데이터를 가져오는 비동기 폴링 루프
     async function fetchSensorData() {
         try {
             const response = await fetch('/api/status');
             const data = await response.json();
 
-            const statusCard = document.getElementById('statusCard');
-            const statusIndicator = document.getElementById('statusIndicator');
-            const statusText = document.getElementById('statusText');
-            const objectName = document.getElementById('objectName');
-            const idVal = document.getElementById('idVal');
-            const xVal = document.getElementById('xVal');
-            const yVal = document.getElementById('yVal');
-
+            // 현재 렌즈가 보고 있는 상태 하단에 모니터링 출력
             if (data.id > 0) {
-                statusCard.classList.add('active');
-                statusIndicator.classList.add('active');
-                statusText.textContent = "사물 인식 완료!";
-                objectName.textContent = data.name;
-                idVal.textContent = "ID " + data.id;
-                xVal.textContent = data.x + " px";
-                yVal.textContent = data.y + " px";
+                realtimeSensor.textContent = `👁️ 실시간 인식: [ID ${data.id}] ${data.name} (X: ${data.x}, Y: ${data.y})`;
             } else {
-                statusCard.classList.remove('active');
-                statusIndicator.classList.remove('active');
-                statusText.textContent = "새로운 사물 탐색 중...";
-                objectName.textContent = "감지 안 됨 🔍";
-                idVal.textContent = "없음";
-                xVal.textContent = "-";
-                yVal.textContent = "-";
+                realtimeSensor.textContent = "🔍 허스키렌즈가 사물을 찾는 중입니다...";
             }
+
+            // [핵심] 게임 플레이 진행 중이고, 수신된 ID가 타겟 퀴즈 ID와 완벽히 맞아떨어졌을 때!
+            if (gameState === "PLAYING" && data.id === currentTarget.id) {
+                gameState = "SOLVED"; // 즉시 정답 고정 모드로 상태 변환 (센서 읽기 멈춤!)
+                
+                score += 10; // 10점 플러스!
+                scoreVal.textContent = score;
+
+                // 시각 및 청각 피드백 연출
+                gameCard.className = "game-card solved";
+                statusBadge.textContent = "정답 완료! 🎉";
+                playTadaSound(); // 따단~
+
+                // 다음 문제로 넘어갈 수 있는 버튼 활성화
+                actionBtn.disabled = false;
+                actionBtn.className = "btn btn-next";
+                actionBtn.textContent = "다음 문제 도전! ➡️";
+            }
+
         } catch (error) {
-            console.error("데이터 갱신 오류:", error);
+            console.error("데이터 통신 중 에러 발생:", error);
         }
     }
 
-    // 주기적 호출 시작
-    setInterval(fetchSensorData, 300);
+    // 5. 제한시간 만료 시 게임 오버 처리
+    function endGame() {
+        gameState = "GAMEOVER";
+        clearInterval(timerInterval);
+        timerInterval = null;
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = null;
+
+        gameCard.className = "game-card gameover";
+        statusBadge.textContent = "TIME OVER";
+        quizWord.textContent = "게임 오버! 😵";
+        realtimeSensor.textContent = `최종 점수는 ${score}점입니다! 대단해요!`;
+        playGameOverSound();
+
+        actionBtn.disabled = false;
+        actionBtn.className = "btn";
+        actionBtn.textContent = "다시 도전하기 🔄";
+    }
 </script>
 
 </body>
