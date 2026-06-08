@@ -185,6 +185,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             width: 100%;
             transition: all 0.2s;
             box-shadow: 0 4px 10px rgba(30, 60, 114, 0.3);
+            margin-bottom: 10px;
         }
         .btn:hover {
             transform: translateY(-2px);
@@ -200,6 +201,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .btn-next:hover {
             background-color: #27ae60;
             box-shadow: 0 6px 15px rgba(46, 204, 113, 0.4);
+        }
+
+        /* 패스 버튼 스타일 */
+        .btn-pass {
+            background-color: #9b59b6;
+            box-shadow: 0 4px 10px rgba(155, 89, 182, 0.3);
+        }
+        .btn-pass:hover {
+            background-color: #8e44ad;
+            box-shadow: 0 6px 15px rgba(155, 89, 182, 0.4);
         }
         
         .realtime-text {
@@ -254,8 +265,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- 컨트롤 버튼 -->
+    <!-- 컨트롤 버튼들 -->
     <button id="actionBtn" class="btn">게임 시작 🎮</button>
+    <button id="passBtn" class="btn btn-pass" disabled>패스 ⏩ (남은 기회: 2회)</button>
 </div>
 
 <script>
@@ -275,6 +287,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     let roundCount = 0;        // 현재 진행 중인 라운드(문제 수)
     let timeLeft = 0;          // 이번 라운드에 남은 시간
     let currentRoundLimit = 0; // 이번 라운드에 부여된 총 제한 시간
+    let passLeft = 2;          // 남은 패스 찬스 횟수
     let timerInterval = null;
     let gameState = "IDLE";    // IDLE, ROULETTE, PLAYING, SOLVED, GAMEOVER
     let pollInterval = null;
@@ -287,6 +300,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const timeVal = document.getElementById("timeVal");
     const timerBar = document.getElementById("timerBar");
     const actionBtn = document.getElementById("actionBtn");
+    const passBtn = document.getElementById("passBtn");
 
     // 가상 오디오 재생기 (효과음)
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -319,6 +333,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         playSound(1046.50, "sine", 0.5, 360);    // 도 (C6)
     }
 
+    // 패스 사용 시 휘리릭! 하는 가속 사운드
+    function playPassSound() {
+        playSound(600, "sine", 0.1, 0);
+        playSound(900, "sine", 0.15, 80);
+    }
+
     // 타임아웃 삐 소리
     function playGameOverSound() {
         playSound(330, "sawtooth", 0.3, 0);
@@ -334,11 +354,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
     });
 
+    // 패스 버튼 클릭 시 작동
+    passBtn.addEventListener("click", () => {
+        if (gameState === "PLAYING" && passLeft > 0) {
+            usePass();
+        }
+    });
+
     // 1. 게임 전반 시동 함수
     function startGame() {
         score = 0;
         roundCount = 0;
+        passLeft = 2; // 패스 기회 2회 초기화
         scoreVal.textContent = score;
+        updatePassButton();
         
         triggerRoulette(); // 첫 문제 선택 룰렛 시동
         
@@ -353,8 +382,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         gameCard.className = "game-card"; // 기본 스타일로 초기화
         statusBadge.textContent = "돌림판 선택 중";
         quizWord.classList.add("rolling");
+        
+        // 다른 제어 버튼 비활성화
         actionBtn.disabled = true;
         actionBtn.textContent = "문제를 고르는 중...";
+        updatePassButton(); // 패스 버튼도 비활성화 적용
+
         timerBar.style.width = "100%";
         timerBar.style.backgroundColor = "#3498db"; // 대기 상태 파란색 바
 
@@ -390,10 +423,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 // 라운드 수 증가
                 roundCount++;
 
-                // 📌 [중요] 각 문제마다 새로운 제한 시간 동적 계산 공식 적용!
-                // 1라운드: 45 - (1*3) = 42초
-                // 2라운드: 45 - (2*3) = 39초 ...
-                // 아무리 어려워져도 15초(Floor) 미만으로는 떨어지지 않음!
+                // 제한 시간 동적 계산 공식 적용 (라운드가 갈수록 3초씩 단축, 최소 15초 보장)
                 currentRoundLimit = Math.max(15, 45 - (roundCount * 3));
                 timeLeft = currentRoundLimit;
                 
@@ -409,7 +439,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 actionBtn.className = "btn";
                 actionBtn.disabled = true;
 
-                // 타이머 재시동
+                // 타이머 및 패스 상태 갱신
+                updatePassButton();
                 startRoundTimer();
             }
         }, tickInterval);
@@ -426,11 +457,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 let percent = (timeLeft / currentRoundLimit) * 100;
                 timerBar.style.width = percent + "%";
                 
-                // 시간에 따라 프로그레스 바 색상을 변경하여 긴장감 연출
                 if (timeLeft <= 5) {
-                    timerBar.style.backgroundColor = "#e74c3c"; // 5초 이하: 아주 위험한 빨간색
+                    timerBar.style.backgroundColor = "#e74c3c"; // 5초 이하: 위험 빨간색
                 } else if (timeLeft <= 12) {
-                    timerBar.style.backgroundColor = "#e67e22"; // 12초 이하: 경고용 주황색
+                    timerBar.style.backgroundColor = "#e67e22"; // 12초 이하: 경고 주황색
                 }
 
                 if (timeLeft <= 0) {
@@ -440,7 +470,41 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }, 1000);
     }
 
-    // 4. 피코 2 WH 로부터 센서 데이터를 가져오는 비동기 폴링 루프
+    // 4. 패스 기능 동작 로직
+    function usePass() {
+        if (gameState !== "PLAYING" || passLeft <= 0) return;
+        
+        passLeft--;
+        playPassSound(); // 패스용 신나는 효과음
+        updatePassButton();
+        
+        // 타이머 일단 멈춤
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+
+        // 즉시 새로운 돌림판 가동
+        triggerRoulette();
+    }
+
+    // 패스 버튼의 모양과 활성화 상태를 제어하는 통합 서브 루틴
+    function updatePassButton() {
+        passBtn.textContent = `패스 ⏩ (남은 기회: ${passLeft}회)`;
+        
+        // 플레이 중(PLAYING)이고 남은 횟수가 존재할 때만 사용 가능
+        if (gameState === "PLAYING" && passLeft > 0) {
+            passBtn.disabled = false;
+            passBtn.style.opacity = "1";
+            passBtn.style.cursor = "pointer";
+        } else {
+            passBtn.disabled = true;
+            passBtn.style.opacity = "0.5";
+            passBtn.style.cursor = "not-allowed";
+        }
+    }
+
+    // 5. 피코 2 WH 로부터 센서 데이터를 가져오는 비동기 폴링 루프
     async function fetchSensorData() {
         try {
             const response = await fetch('/api/status');
@@ -457,11 +521,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             if (gameState === "PLAYING" && data.id === currentTarget.id) {
                 gameState = "SOLVED"; // 즉시 정답 고정 모드로 상태 변환 (센서 감지 멈춤!)
                 
-                // 📌 정답을 맞췄으므로 즉시 시간 차감 정지!
+                // 정답을 맞췄으므로 즉시 시간 차감 정지 및 패스 버튼 비활성화
                 if (timerInterval) {
                     clearInterval(timerInterval);
                     timerInterval = null;
                 }
+                updatePassButton();
                 
                 score += 10; // 10점 플러스!
                 scoreVal.textContent = score;
@@ -482,7 +547,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
     }
 
-    // 5. 제한시간 만료 시 게임 오버 처리
+    // 6. 제한시간 만료 시 게임 오버 처리
     function endGame() {
         gameState = "GAMEOVER";
         clearInterval(timerInterval);
@@ -495,6 +560,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         quizWord.textContent = "게임 오버! 😵";
         realtimeSensor.textContent = `최종 점수는 ${score}점입니다! (총 ${roundCount - 1}개 해결)`;
         playGameOverSound();
+
+        updatePassButton(); // 패스 버튼 비활성화
 
         actionBtn.disabled = false;
         actionBtn.className = "btn";
