@@ -167,7 +167,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .timer-bar {
             height: 100%;
             width: 100%;
-            background-color: #e67e22;
+            background-color: #2ecc71;
             transition: width 1s linear, background-color 0.5s;
             border-radius: 5px;
         }
@@ -250,7 +250,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
         <div class="stat-box">
             <div class="stat-label">남은 시간</div>
-            <div class="stat-value" id="timeVal">60초</div>
+            <div class="stat-value" id="timeVal">대기 중</div>
         </div>
     </div>
 
@@ -272,10 +272,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     // 게임 상태 변수
     let currentTarget = null;
     let score = 0;
-    let timeLeft = 60;
-    let totalTimeLimit = 60;
+    let roundCount = 0;        // 현재 진행 중인 라운드(문제 수)
+    let timeLeft = 0;          // 이번 라운드에 남은 시간
+    let currentRoundLimit = 0; // 이번 라운드에 부여된 총 제한 시간
     let timerInterval = null;
-    let gameState = "IDLE"; // IDLE, ROULETTE, PLAYING, SOLVED, GAMEOVER
+    let gameState = "IDLE";    // IDLE, ROULETTE, PLAYING, SOLVED, GAMEOVER
     let pollInterval = null;
 
     const gameCard = document.getElementById("gameCard");
@@ -336,11 +337,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     // 1. 게임 전반 시동 함수
     function startGame() {
         score = 0;
-        timeLeft = totalTimeLimit;
+        roundCount = 0;
         scoreVal.textContent = score;
-        timeVal.textContent = timeLeft + "초";
-        timerBar.style.width = "100%";
-        timerBar.style.backgroundColor = "#e67e22";
         
         triggerRoulette(); // 첫 문제 선택 룰렛 시동
         
@@ -352,11 +350,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     // 2. 랜덤 돌림판 애니메이션 (도로로로 굴러가기)
     function triggerRoulette() {
         gameState = "ROULETTE";
-        gameCard.className = "game-card"; // 기본 클래스로 변경
+        gameCard.className = "game-card"; // 기본 스타일로 초기화
         statusBadge.textContent = "돌림판 선택 중";
         quizWord.classList.add("rolling");
         actionBtn.disabled = true;
         actionBtn.textContent = "문제를 고르는 중...";
+        timerBar.style.width = "100%";
+        timerBar.style.backgroundColor = "#3498db"; // 대기 상태 파란색 바
 
         let spinDuration = 1600; // 1.6초간 돌림판 작동
         let tickInterval = 80;
@@ -387,35 +387,50 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 quizWord.textContent = currentTarget.name;
                 quizWord.classList.remove("rolling");
                 
+                // 라운드 수 증가
+                roundCount++;
+
+                // 📌 [중요] 각 문제마다 새로운 제한 시간 동적 계산 공식 적용!
+                // 1라운드: 45 - (1*3) = 42초
+                // 2라운드: 45 - (2*3) = 39초 ...
+                // 아무리 어려워져도 15초(Floor) 미만으로는 떨어지지 않음!
+                currentRoundLimit = Math.max(15, 45 - (roundCount * 3));
+                timeLeft = currentRoundLimit;
+                
+                timeVal.textContent = timeLeft + "초";
+                timerBar.style.width = "100%";
+                timerBar.style.backgroundColor = "#2ecc71"; // 게임 시작 시 안전한 초록색 바
+
                 // 본격 플레이 모드 돌입
                 gameState = "PLAYING";
                 gameCard.className = "game-card playing";
-                statusBadge.textContent = "사물을 그리세요!";
+                statusBadge.textContent = `Q ${roundCount} (제한시간: ${currentRoundLimit}초)`;
                 actionBtn.textContent = "그림 그리는 중...";
                 actionBtn.className = "btn";
                 actionBtn.disabled = true;
 
-                // 타이머 시동 (한 번만 세팅)
-                if (!timerInterval) {
-                    startGlobalTimer();
-                }
+                // 타이머 재시동
+                startRoundTimer();
             }
         }, tickInterval);
     }
 
-    // 3. 1초마다 작동하는 글로벌 제한시간 감소 함수
-    function startGlobalTimer() {
+    // 3. 개별 라운드 카운트다운 타이머
+    function startRoundTimer() {
         if (timerInterval) clearInterval(timerInterval);
         timerInterval = setInterval(() => {
-            if (gameState === "PLAYING") { // 정답 고정 상태나 룰렛 중에는 시간 차감 일시 정지!
+            if (gameState === "PLAYING") {
                 timeLeft--;
                 timeVal.textContent = timeLeft + "초";
                 
-                let percent = (timeLeft / totalTimeLimit) * 100;
+                let percent = (timeLeft / currentRoundLimit) * 100;
                 timerBar.style.width = percent + "%";
                 
-                if (timeLeft <= 10) {
-                    timerBar.style.backgroundColor = "#e74c3c"; // 10초 미만일 땐 빨간 경고색
+                // 시간에 따라 프로그레스 바 색상을 변경하여 긴장감 연출
+                if (timeLeft <= 5) {
+                    timerBar.style.backgroundColor = "#e74c3c"; // 5초 이하: 아주 위험한 빨간색
+                } else if (timeLeft <= 12) {
+                    timerBar.style.backgroundColor = "#e67e22"; // 12초 이하: 경고용 주황색
                 }
 
                 if (timeLeft <= 0) {
@@ -440,14 +455,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
             // [핵심] 게임 플레이 진행 중이고, 수신된 ID가 타겟 퀴즈 ID와 완벽히 맞아떨어졌을 때!
             if (gameState === "PLAYING" && data.id === currentTarget.id) {
-                gameState = "SOLVED"; // 즉시 정답 고정 모드로 상태 변환 (센서 읽기 멈춤!)
+                gameState = "SOLVED"; // 즉시 정답 고정 모드로 상태 변환 (센서 감지 멈춤!)
+                
+                // 📌 정답을 맞췄으므로 즉시 시간 차감 정지!
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
                 
                 score += 10; // 10점 플러스!
                 scoreVal.textContent = score;
 
                 // 시각 및 청각 피드백 연출
                 gameCard.className = "game-card solved";
-                statusBadge.textContent = "정답 완료! 🎉";
+                statusBadge.textContent = `Q ${roundCount} 해결 성공! 🎉`;
                 playTadaSound(); // 따단~
 
                 // 다음 문제로 넘어갈 수 있는 버튼 활성화
@@ -472,7 +493,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         gameCard.className = "game-card gameover";
         statusBadge.textContent = "TIME OVER";
         quizWord.textContent = "게임 오버! 😵";
-        realtimeSensor.textContent = `최종 점수는 ${score}점입니다! 대단해요!`;
+        realtimeSensor.textContent = `최종 점수는 ${score}점입니다! (총 ${roundCount - 1}개 해결)`;
         playGameOverSound();
 
         actionBtn.disabled = false;
@@ -496,7 +517,6 @@ def connect_wifi(ssid, password):
     print("📶 Wi-Fi 연결 중...", end="")
     max_wait = 15
     while max_wait > 0:
-        # 3은 STAT_GOT_IP(IP 할당 성공)을 의미합니다.
         if wlan.status() < 0 or wlan.status() >= 3:
             break
         max_wait -= 1
@@ -521,7 +541,6 @@ async def poll_huskylens(husky, led):
     
     while True:
         try:
-            # I2C 통신으로 블록 데이터 가져오기 (비동기 루프를 방해하지 않는 수준)
             result = husky.command_request_blocks()
             if result:
                 for obj in result:
@@ -546,10 +565,8 @@ async def poll_huskylens(husky, led):
                 coord_y = 0
                 led.off()
         except Exception as e:
-            # 일시적인 센서 통신 노이즈 발생 시 무시하고 진행
             pass
             
-        # 다른 비동기 테스크(웹 통신 등)에 CPU를 일시 양보합니다.
         await asyncio.sleep(0.1)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -559,9 +576,7 @@ async def handle_client(reader, writer):
     global detected_id, detected_name, coord_x, coord_y
     
     try:
-        # 첫 번째 요청 헤더 라인 파싱
         request_line = await reader.readline()
-        # 남은 패킷 헤더 버퍼 비우기
         while True:
             line = await reader.readline()
             if line == b'\r\n' or line == b'\n' or not line:
@@ -571,7 +586,6 @@ async def handle_client(reader, writer):
         
         # 1. API 데이터 요청 처리 (JSON 리턴)
         if "GET /api/status" in request:
-            # JSON 포맷으로 실시간 정보 제공
             json_response = '{"id": %d, "name": "%s", "x": %d, "y": %d}' % (
                 detected_id, detected_name, coord_x, coord_y
             )
@@ -598,7 +612,6 @@ async def handle_client(reader, writer):
 # [메인 실행 제어기]
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async def main():
-    # 1. 내장 LED 및 허스키렌즈 통신 초기화
     led = Pin("LED", Pin.OUT)
     husky = HuskyLensLibrary("I2C")
     await asyncio.sleep(0.5)
@@ -607,22 +620,15 @@ async def main():
     husky.command_request_algorthim("ALGORITHM_OBJECT_CLASSIFICATION")
     await asyncio.sleep(0.5)
 
-    # 2. Wi-Fi 연결 시도
     ip_addr = connect_wifi(SSID, PASSWORD)
-    
-    # 3. 비동기 Task 스케줄에 센서 폴링 태스크 등록
     asyncio.create_task(poll_huskylens(husky, led))
     
-    # 4. 와이파이 연결 성공 시에만 웹 서버 구동
     if ip_addr:
         print(f"📢 스마트폰/컴퓨터 주소창에 다음을 입력하세요 ➡️ http://{ip_addr}")
-        # 포트 80(기본 HTTP 포트)으로 서버 열기
         server = await asyncio.start_server(handle_client, "0.0.0.0", 80)
-        
         while True:
-            await asyncio.sleep(3600) # 서버 백그라운드 무한 대기
+            await asyncio.sleep(3600)
     else:
-        # Wi-Fi가 없으면 시리얼(Thonny) 모니터 전용 모드로 전환
         while True:
             print(f"📡 시리얼 확인용 모드 -> {detected_name} (ID: {detected_id})")
             await asyncio.sleep(1)
