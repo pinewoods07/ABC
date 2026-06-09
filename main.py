@@ -1,24 +1,19 @@
 # main.py
 import network
-import socket
 import time
 import uasyncio as asyncio
 from machine import Pin
 from huskylensPythonLibrary import HuskyLensLibrary
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# [와이파이 설정] 당곡고 교실이나 집의 와이파이 정보를 적어주세요!
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SSID = "app"          # 와이파이 이름
-PASSWORD = "20242024"  # 와이파이 비밀번호
+SSID = "app"
+PASSWORD = "20242024"
 
-# 실시간 감지 상태를 저장하는 전역 변수
 detected_id = 0
 detected_name = "감지 안 됨"
 coord_x = 0
 coord_y = 0
 
-# 사물 분류 ID 매핑 테이블 (학생의 6가지 사물 그대로 적용)
+# ★ 피코의 사물 목록 (ID: 이름)
 object_map = {
     1: "사과",
     2: "자동차",
@@ -28,9 +23,6 @@ object_map = {
     6: "치즈",
 }
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# [대폭 업그레이드된 게임 및 검증 웹사이트 HTML 템플릿]
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -53,19 +45,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .container {
             max-width: 500px;
             width: 100%;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255,255,255,0.95);
             border-radius: 24px;
             box-shadow: 0 15px 35px rgba(0,0,0,0.3);
             padding: 30px;
             box-sizing: border-box;
             text-align: center;
-            backdrop-filter: blur(10px);
         }
         h1 {
             color: #1e3c72;
             font-size: 2.2rem;
             margin: 0 0 5px 0;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
         }
         .subtitle {
             color: #666;
@@ -73,31 +63,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             margin-bottom: 25px;
             font-weight: bold;
         }
-        
-        /* 메인 게임 보드 패널 */
         .game-card {
             background-color: #f8f9fa;
             border: 4px solid #1e3c72;
             border-radius: 20px;
             padding: 25px;
             margin-bottom: 20px;
-            position: relative;
-            overflow: hidden;
             transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
-        .game-card.playing {
-            border-color: #e67e22;
-            background-color: #fdfaf6;
-        }
-        .game-card.solved {
-            border-color: #2ecc71;
-            background-color: #ebfaf0;
-            box-shadow: 0 0 20px rgba(46, 204, 113, 0.5);
-        }
-        .game-card.gameover {
-            border-color: #e74c3c;
-            background-color: #fdf5f5;
-        }
+        .game-card.playing  { border-color: #e67e22; background-color: #fdfaf6; }
+        .game-card.solved   { border-color: #2ecc71; background-color: #ebfaf0; box-shadow: 0 0 20px rgba(46,204,113,0.5); }
+        .game-card.gameover { border-color: #e74c3c; background-color: #fdf5f5; }
 
         .status-badge {
             display: inline-block;
@@ -109,11 +85,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             font-weight: bold;
             margin-bottom: 15px;
         }
-        .game-card.solved .status-badge { background: #2ecc71; }
-        .game-card.playing .status-badge { background: #e67e22; }
+        .game-card.solved   .status-badge { background: #2ecc71; }
+        .game-card.playing  .status-badge { background: #e67e22; }
         .game-card.gameover .status-badge { background: #e74c3c; }
 
-        /* 룰렛 단어 영역 */
         .quiz-word {
             font-size: 3.5rem;
             font-weight: 900;
@@ -123,14 +98,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: transform 0.1s ease;
         }
         .quiz-word.rolling {
             animation: shake 0.1s infinite;
             color: #7f8c8d;
         }
-        
-        /* 정보 그리드 */
+
         .stats-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -154,8 +127,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             font-weight: bold;
             color: #1e3c72;
         }
-        
-        /* 타이머 프로그레스 바 */
+
         .timer-container {
             width: 100%;
             height: 10px;
@@ -172,7 +144,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             border-radius: 5px;
         }
 
-        /* 컨트롤 버튼들 */
         .btn {
             background-color: #1e3c72;
             color: white;
@@ -184,35 +155,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             cursor: pointer;
             width: 100%;
             transition: all 0.2s;
-            box-shadow: 0 4px 10px rgba(30, 60, 114, 0.3);
+            box-shadow: 0 4px 10px rgba(30,60,114,0.3);
             margin-bottom: 10px;
         }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 15px rgba(30, 60, 114, 0.4);
-        }
-        .btn:active {
-            transform: translateY(1px);
-        }
+        .btn:hover   { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(30,60,114,0.4); }
+        .btn:active  { transform: translateY(1px); }
+
         .btn-next {
             background-color: #2ecc71;
-            box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
+            box-shadow: 0 4px 10px rgba(46,204,113,0.3);
         }
-        .btn-next:hover {
-            background-color: #27ae60;
-            box-shadow: 0 6px 15px rgba(46, 204, 113, 0.4);
-        }
+        .btn-next:hover { background-color: #27ae60; }
 
-        /* 패스 버튼 스타일 */
         .btn-pass {
             background-color: #9b59b6;
-            box-shadow: 0 4px 10px rgba(155, 89, 182, 0.3);
+            box-shadow: 0 4px 10px rgba(155,89,182,0.3);
         }
-        .btn-pass:hover {
-            background-color: #8e44ad;
-            box-shadow: 0 6px 15px rgba(155, 89, 182, 0.4);
-        }
-        
+        .btn-pass:hover { background-color: #8e44ad; }
+
         .realtime-text {
             font-size: 0.85rem;
             color: #7f8c8d;
@@ -221,39 +181,35 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         @keyframes shake {
-            0% { transform: translate(1px, 1px) rotate(0deg); }
-            10% { transform: translate(-1px, -1px) rotate(-1deg); }
-            20% { transform: translate(-2px, 0px) rotate(1deg); }
-            30% { transform: translate(0px, 1px) rotate(0deg); }
-            40% { transform: translate(1px, -1px) rotate(1deg); }
-            50% { transform: translate(-1px, 1px) rotate(-1deg); }
-            60% { transform: translate(-2px, -1px) rotate(0deg); }
-            70% { transform: translate(1px, 1px) rotate(-1deg); }
-            80% { transform: translate(-1px, -1px) rotate(1deg); }
-            90% { transform: translate(2px, 1px) rotate(0deg); }
-            100% { transform: translate(1px, -2px) rotate(-1deg); }
+            0%   { transform: translate(1px, 1px)   rotate(0deg);  }
+            10%  { transform: translate(-1px, -1px) rotate(-1deg); }
+            20%  { transform: translate(-2px, 0px)  rotate(1deg);  }
+            30%  { transform: translate(0px, 1px)   rotate(0deg);  }
+            40%  { transform: translate(1px, -1px)  rotate(1deg);  }
+            50%  { transform: translate(-1px, 1px)  rotate(-1deg); }
+            60%  { transform: translate(-2px, -1px) rotate(0deg);  }
+            70%  { transform: translate(1px, 1px)   rotate(-1deg); }
+            80%  { transform: translate(-1px, -1px) rotate(1deg);  }
+            90%  { transform: translate(2px, 1px)   rotate(0deg);  }
+            100% { transform: translate(1px, -2px)  rotate(-1deg); }
         }
     </style>
 </head>
 <body>
-
 <div class="container">
     <h1>🎨 AI 드로잉 챌린지</h1>
     <div class="subtitle">당곡고등학교 하드웨어-AI 융합 부스</div>
 
-    <!-- 타이머 바 -->
     <div class="timer-container">
         <div id="timerBar" class="timer-bar"></div>
     </div>
 
-    <!-- 메인 게임 카드 -->
     <div id="gameCard" class="game-card">
         <div id="statusBadge" class="status-badge">대기 중</div>
         <div id="quizWord" class="quiz-word">START 버튼을 눌러요!</div>
         <div id="realtimeSensor" class="realtime-text">허스키렌즈 연결 상태를 확인해주세요.</div>
     </div>
 
-    <!-- 상태 정보 보드 -->
     <div class="stats-grid">
         <div class="stat-box">
             <div class="stat-label">현재 점수</div>
@@ -265,49 +221,48 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- 컨트롤 버튼들 -->
     <button id="actionBtn" class="btn">게임 시작 🎮</button>
-    <button id="passBtn" class="btn btn-pass" disabled>패스 ⏩ (남은 기회: 2회)</button>
+    <button id="passBtn"   class="btn btn-pass" disabled>패스 ⏩ (남은 기회: 2회)</button>
 </div>
 
 <script>
-    // 6가지 정답 사물 목록
+    // ★ 핵심 수정 포인트!
+    // 피코의 object_map과 완벽히 동기화된 사물 목록
+    // 사물을 추가/변경할 때는 여기와 파이썬 object_map을 항상 함께 수정하세요!
     const items = [
         { id: 1, name: "사과 🍎" },
         { id: 2, name: "자동차 🚗" },
         { id: 3, name: "별 ⭐" },
-        { id: 4, name: "우산 ☂️" },
-        { id: 5, name: "의자 🪑" },
-        { id: 6, name: "핸드폰 📱" }
+        { id: 4, name: "의자 🪑" },
+        { id: 5, name: "핸드폰 📱" },
+        { id: 6, name: "치즈 🧀" }
     ];
 
-    // 게임 상태 변수
-    let currentTarget = null;
-    let score = 0;
-    let roundCount = 0;        // 현재 진행 중인 라운드(문제 수)
-    let timeLeft = 0;          // 이번 라운드에 남은 시간
-    let currentRoundLimit = 0; // 이번 라운드에 부여된 총 제한 시간
-    let passLeft = 2;          // 남은 패스 찬스 횟수
-    let timerInterval = null;
-    let gameState = "IDLE";    // IDLE, ROULETTE, PLAYING, SOLVED, GAMEOVER
-    let pollInterval = null;
+    let currentTarget  = null;
+    let score          = 0;
+    let roundCount     = 0;
+    let timeLeft       = 0;
+    let currentRoundLimit = 0;
+    let passLeft       = 2;
+    let timerInterval  = null;
+    let gameState      = "IDLE";
+    let pollInterval   = null;
 
-    const gameCard = document.getElementById("gameCard");
-    const statusBadge = document.getElementById("statusBadge");
-    const quizWord = document.getElementById("quizWord");
-    const realtimeSensor = document.getElementById("realtimeSensor");
-    const scoreVal = document.getElementById("scoreVal");
-    const timeVal = document.getElementById("timeVal");
-    const timerBar = document.getElementById("timerBar");
-    const actionBtn = document.getElementById("actionBtn");
-    const passBtn = document.getElementById("passBtn");
+    const gameCard      = document.getElementById("gameCard");
+    const statusBadge   = document.getElementById("statusBadge");
+    const quizWord      = document.getElementById("quizWord");
+    const realtimeSensor= document.getElementById("realtimeSensor");
+    const scoreVal      = document.getElementById("scoreVal");
+    const timeVal       = document.getElementById("timeVal");
+    const timerBar      = document.getElementById("timerBar");
+    const actionBtn     = document.getElementById("actionBtn");
+    const passBtn       = document.getElementById("passBtn");
 
-    // 가상 오디오 재생기 (효과음)
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    function playSound(freq, type, duration, delay=0) {
+    function playSound(freq, type, duration, delay = 0) {
         setTimeout(() => {
-            const osc = audioCtx.createOscillator();
+            const osc  = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain);
             gain.connect(audioCtx.destination);
@@ -320,267 +275,198 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }, delay);
     }
 
-    // 룰렛 회전 효과음 (짧게 째깍째깍)
-    function playTickSound() {
-        playSound(800, "triangle", 0.05);
-    }
-
-    // 정답 팡파르 효과음 ("따단~" 쾌감 업!)
-    function playTadaSound() {
-        playSound(523.25, "sine", 0.15, 0);      // 도 (C5)
-        playSound(659.25, "sine", 0.15, 120);    // 미 (E5)
-        playSound(783.99, "sine", 0.3, 240);     // 솔 (G5)
-        playSound(1046.50, "sine", 0.5, 360);    // 도 (C6)
-    }
-
-    // 패스 사용 시 휘리릭! 하는 가속 사운드
-    function playPassSound() {
-        playSound(600, "sine", 0.1, 0);
+    const playTickSound     = () => playSound(800, "triangle", 0.05);
+    const playTadaSound     = () => {
+        playSound(523.25, "sine", 0.15, 0);
+        playSound(659.25, "sine", 0.15, 120);
+        playSound(783.99, "sine", 0.3,  240);
+        playSound(1046.5, "sine", 0.5,  360);
+    };
+    const playPassSound     = () => {
+        playSound(600, "sine", 0.1,  0);
         playSound(900, "sine", 0.15, 80);
-    }
-
-    // 타임아웃 삐 소리
-    function playGameOverSound() {
+    };
+    const playGameOverSound = () => {
         playSound(330, "sawtooth", 0.3, 0);
         playSound(220, "sawtooth", 0.6, 300);
-    }
+    };
 
-    // 버튼 클릭 이벤트 리스너
+    // ── 버튼 이벤트 ──────────────────────────────────────────
     actionBtn.addEventListener("click", () => {
-        if (gameState === "IDLE" || gameState === "GAMEOVER") {
-            startGame();
-        } else if (gameState === "SOLVED") {
-            triggerRoulette();
-        }
+        if (gameState === "IDLE" || gameState === "GAMEOVER") startGame();
+        else if (gameState === "SOLVED") triggerRoulette();
     });
 
-    // 패스 버튼 클릭 시 작동
     passBtn.addEventListener("click", () => {
-        if (gameState === "PLAYING" && passLeft > 0) {
-            usePass();
-        }
+        if (gameState === "PLAYING" && passLeft > 0) usePass();
     });
 
-    // 1. 게임 전반 시동 함수
+    // ── 1. 게임 시작 ─────────────────────────────────────────
     function startGame() {
-        score = 0;
+        score      = 0;
         roundCount = 0;
-        passLeft = 2; // 패스 기회 2회 초기화
+        passLeft   = 2;
         scoreVal.textContent = score;
         updatePassButton();
-        
-        triggerRoulette(); // 첫 문제 선택 룰렛 시동
-        
-        // 피코 데이터 수신 센서 루프 시작
+
         if (pollInterval) clearInterval(pollInterval);
         pollInterval = setInterval(fetchSensorData, 300);
+
+        triggerRoulette();
     }
 
-    // 2. 랜덤 돌림판 애니메이션 (도로로로 굴러가기)
+    // ── 2. 돌림판 ────────────────────────────────────────────
     function triggerRoulette() {
         gameState = "ROULETTE";
-        gameCard.className = "game-card"; // 기본 스타일로 초기화
+        gameCard.className = "game-card";
         statusBadge.textContent = "돌림판 선택 중";
         quizWord.classList.add("rolling");
-        
-        // 다른 제어 버튼 비활성화
         actionBtn.disabled = true;
         actionBtn.textContent = "문제를 고르는 중...";
-        updatePassButton(); // 패스 버튼도 비활성화 적용
-
+        updatePassButton();
         timerBar.style.width = "100%";
-        timerBar.style.backgroundColor = "#3498db"; // 대기 상태 파란색 바
+        timerBar.style.backgroundColor = "#3498db";
 
-        let spinDuration = 1600; // 1.6초간 돌림판 작동
-        let tickInterval = 80;
         let elapsed = 0;
+        const spinDuration = 1600;
+        const tickInterval = 80;
         let lastIdx = -1;
 
-        let spinTimer = setInterval(() => {
+        const spinTimer = setInterval(() => {
             let randIdx;
-            do {
-                randIdx = Math.floor(Math.random() * items.length);
-            } while (randIdx === lastIdx);
-            
+            do { randIdx = Math.floor(Math.random() * items.length); }
+            while (randIdx === lastIdx);
             lastIdx = randIdx;
             quizWord.textContent = items[randIdx].name;
-            playTickSound(); // 째깍 효과음 재생
+            playTickSound();
             elapsed += tickInterval;
 
             if (elapsed >= spinDuration) {
                 clearInterval(spinTimer);
-                
-                // 새로운 문제 확정 (직전 문제와 겹치지 않게)
+
+                // 직전 문제와 겹치지 않게 최종 문제 확정
                 let finalTarget;
-                do {
-                    finalTarget = items[Math.floor(Math.random() * items.length)];
-                } while (currentTarget && finalTarget.id === currentTarget.id);
+                do { finalTarget = items[Math.floor(Math.random() * items.length)]; }
+                while (currentTarget && finalTarget.id === currentTarget.id);
 
                 currentTarget = finalTarget;
                 quizWord.textContent = currentTarget.name;
                 quizWord.classList.remove("rolling");
-                
-                // 라운드 수 증가
-                roundCount++;
 
-                // 제한 시간 동적 계산 공식 적용 (라운드가 갈수록 3초씩 단축, 최소 15초 보장)
+                roundCount++;
+                // 라운드마다 3초씩 감소, 최소 15초 보장
                 currentRoundLimit = Math.max(15, 45 - (roundCount * 3));
                 timeLeft = currentRoundLimit;
-                
+
                 timeVal.textContent = timeLeft + "초";
                 timerBar.style.width = "100%";
-                timerBar.style.backgroundColor = "#2ecc71"; // 게임 시작 시 안전한 초록색 바
+                timerBar.style.backgroundColor = "#2ecc71";
 
-                // 본격 플레이 모드 돌입
                 gameState = "PLAYING";
                 gameCard.className = "game-card playing";
-                statusBadge.textContent = `Q ${roundCount} (제한시간: ${currentRoundLimit}초)`;
+                statusBadge.textContent = `Q ${roundCount}  (제한시간: ${currentRoundLimit}초)`;
                 actionBtn.textContent = "그림 그리는 중...";
                 actionBtn.className = "btn";
                 actionBtn.disabled = true;
 
-                // 타이머 및 패스 상태 갱신
                 updatePassButton();
                 startRoundTimer();
             }
         }, tickInterval);
     }
 
-    // 3. 개별 라운드 카운트다운 타이머
+    // ── 3. 라운드 타이머 ──────────────────────────────────────
     function startRoundTimer() {
         if (timerInterval) clearInterval(timerInterval);
         timerInterval = setInterval(() => {
-            if (gameState === "PLAYING") {
-                timeLeft--;
-                timeVal.textContent = timeLeft + "초";
-                
-                let percent = (timeLeft / currentRoundLimit) * 100;
-                timerBar.style.width = percent + "%";
-                
-                if (timeLeft <= 5) {
-                    timerBar.style.backgroundColor = "#e74c3c"; // 5초 이하: 위험 빨간색
-                } else if (timeLeft <= 12) {
-                    timerBar.style.backgroundColor = "#e67e22"; // 12초 이하: 경고 주황색
-                }
+            if (gameState !== "PLAYING") return;
+            timeLeft--;
+            timeVal.textContent = timeLeft + "초";
+            timerBar.style.width = (timeLeft / currentRoundLimit * 100) + "%";
 
-                if (timeLeft <= 0) {
-                    endGame();
-                }
-            }
+            if      (timeLeft <= 5)  timerBar.style.backgroundColor = "#e74c3c";
+            else if (timeLeft <= 12) timerBar.style.backgroundColor = "#e67e22";
+
+            if (timeLeft <= 0) endGame();
         }, 1000);
     }
 
-    // 4. 패스 기능 동작 로직
+    // ── 4. 패스 ──────────────────────────────────────────────
     function usePass() {
         if (gameState !== "PLAYING" || passLeft <= 0) return;
-        
         passLeft--;
-        playPassSound(); // 패스용 신나는 효과음
+        playPassSound();
         updatePassButton();
-        
-        // 타이머 일단 멈춤
-        if (timerInterval) {
-            clearInterval(timerInterval);
-            timerInterval = null;
-        }
-
-        // 즉시 새로운 돌림판 가동
+        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
         triggerRoulette();
     }
 
-    // 패스 버튼의 모양과 활성화 상태를 제어하는 통합 서브 루틴
     function updatePassButton() {
         passBtn.textContent = `패스 ⏩ (남은 기회: ${passLeft}회)`;
-        
-        // 플레이 중(PLAYING)이고 남은 횟수가 존재할 때만 사용 가능
-        if (gameState === "PLAYING" && passLeft > 0) {
-            passBtn.disabled = false;
-            passBtn.style.opacity = "1";
-            passBtn.style.cursor = "pointer";
-        } else {
-            passBtn.disabled = true;
-            passBtn.style.opacity = "0.5";
-            passBtn.style.cursor = "not-allowed";
-        }
+        const canUse = (gameState === "PLAYING" && passLeft > 0);
+        passBtn.disabled       = !canUse;
+        passBtn.style.opacity  = canUse ? "1"         : "0.5";
+        passBtn.style.cursor   = canUse ? "pointer"   : "not-allowed";
     }
 
-    // 5. 피코 2 WH 로부터 센서 데이터를 가져오는 비동기 폴링 루프
+    // ── 5. 센서 폴링 ──────────────────────────────────────────
     async function fetchSensorData() {
         try {
-            const response = await fetch('/api/status');
-            const data = await response.json();
+            const res  = await fetch('/api/status');
+            const data = await res.json();
 
-            // 현재 렌즈가 보고 있는 상태 하단에 모니터링 출력
-            if (data.id > 0) {
-                realtimeSensor.textContent = `👁️ 실시간 인식: [ID ${data.id}] ${data.name} (X: ${data.x}, Y: ${data.y})`;
-            } else {
-                realtimeSensor.textContent = "🔍 허스키렌즈가 사물을 찾는 중입니다...";
-            }
+            realtimeSensor.textContent = data.id > 0
+                ? `👁️ 실시간 인식: [ID ${data.id}] ${data.name}  (X: ${data.x}, Y: ${data.y})`
+                : "🔍 허스키렌즈가 사물을 찾는 중입니다...";
 
-            // [핵심] 게임 플레이 진행 중이고, 수신된 ID가 타겟 퀴즈 ID와 완벽히 맞아떨어졌을 때!
             if (gameState === "PLAYING" && data.id === currentTarget.id) {
-                gameState = "SOLVED"; // 즉시 정답 고정 모드로 상태 변환 (센서 감지 멈춤!)
-                
-                // 정답을 맞췄으므로 즉시 시간 차감 정지 및 패스 버튼 비활성화
-                if (timerInterval) {
-                    clearInterval(timerInterval);
-                    timerInterval = null;
-                }
+                gameState = "SOLVED";
+
+                if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
                 updatePassButton();
-                
-                score += 10; // 10점 플러스!
+
+                score += 10;
                 scoreVal.textContent = score;
-
-                // 시각 및 청각 피드백 연출
-                gameCard.className = "game-card solved";
+                gameCard.className   = "game-card solved";
                 statusBadge.textContent = `Q ${roundCount} 해결 성공! 🎉`;
-                playTadaSound(); // 따단~
+                playTadaSound();
 
-                // 다음 문제로 넘어갈 수 있는 버튼 활성화
-                actionBtn.disabled = false;
-                actionBtn.className = "btn btn-next";
+                actionBtn.disabled   = false;
+                actionBtn.className  = "btn btn-next";
                 actionBtn.textContent = "다음 문제 도전! ➡️";
             }
-
-        } catch (error) {
-            console.error("데이터 통신 중 에러 발생:", error);
+        } catch (e) {
+            console.error("데이터 통신 오류:", e);
         }
     }
 
-    // 6. 제한시간 만료 시 게임 오버 처리
+    // ── 6. 게임 오버 ──────────────────────────────────────────
     function endGame() {
         gameState = "GAMEOVER";
-        clearInterval(timerInterval);
-        timerInterval = null;
-        if (pollInterval) clearInterval(pollInterval);
-        pollInterval = null;
+        clearInterval(timerInterval); timerInterval = null;
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
 
-        gameCard.className = "game-card gameover";
+        gameCard.className      = "game-card gameover";
         statusBadge.textContent = "TIME OVER";
-        quizWord.textContent = "게임 오버! 😵";
-        realtimeSensor.textContent = `최종 점수는 ${score}점입니다! (총 ${roundCount - 1}개 해결)`;
+        quizWord.textContent    = "게임 오버! 😵";
+        realtimeSensor.textContent =
+            `최종 점수: ${score}점  (총 ${roundCount - 1}개 해결)`;
         playGameOverSound();
+        updatePassButton();
 
-        updatePassButton(); // 패스 버튼 비활성화
-
-        actionBtn.disabled = false;
-        actionBtn.className = "btn";
+        actionBtn.disabled    = false;
+        actionBtn.className   = "btn";
         actionBtn.textContent = "다시 도전하기 🔄";
     }
 </script>
-
 </body>
 </html>
 """
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# [와이파이 연결 함수]
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def connect_wifi(ssid, password):
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     wlan.connect(ssid, password)
-    
     print("📶 Wi-Fi 연결 중...", end="")
     max_wait = 15
     while max_wait > 0:
@@ -589,7 +475,6 @@ def connect_wifi(ssid, password):
         max_wait -= 1
         print(".", end="")
         time.sleep(1)
-        
     if wlan.isconnected():
         status = wlan.ifconfig()
         print("\n✅ Wi-Fi 연결 성공!")
@@ -599,13 +484,9 @@ def connect_wifi(ssid, password):
         print("\n❌ 연결 실패. (시리얼 출력 모드로만 작동합니다.)")
         return None
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# [허스키렌즈 실시간 측정 비동기 루프]
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async def poll_huskylens(husky, led):
     global detected_id, detected_name, coord_x, coord_y
     print("📷 허스키렌즈 감지 센서 작동 시작...")
-    
     while True:
         try:
             result = husky.command_request_blocks()
@@ -613,61 +494,48 @@ async def poll_huskylens(husky, led):
                 for obj in result:
                     x, y, w, h, obj_id = obj
                     if obj_id > 0:
-                        detected_id = obj_id
-                        detected_name = object_map.get(obj_id, "알 수 없는 사물 ❓")
-                        coord_x = x
-                        coord_y = y
-                        led.on() # 정상 인식 시 초록 LED ON
+                        detected_id   = obj_id
+                        detected_name = object_map.get(obj_id, "알 수 없는 사물")
+                        coord_x, coord_y = x, y
+                        led.on()
                     else:
                         detected_id = 0
                         detected_name = "학습되지 않은 사물"
-                        coord_x = 0
-                        coord_y = 0
+                        coord_x = coord_y = 0
                         led.off()
-                    break # 첫 번째 물체 기준값만 전송
+                    break
             else:
                 detected_id = 0
                 detected_name = "감지 안 됨"
-                coord_x = 0
-                coord_y = 0
+                coord_x = coord_y = 0
                 led.off()
-        except Exception as e:
+        except Exception:
             pass
-            
         await asyncio.sleep(0.1)
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# [비동기 웹 서버 클라이언트 처리기]
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async def handle_client(reader, writer):
     global detected_id, detected_name, coord_x, coord_y
-    
     try:
         request_line = await reader.readline()
         while True:
             line = await reader.readline()
-            if line == b'\r\n' or line == b'\n' or not line:
+            if line in (b'\r\n', b'\n') or not line:
                 break
-                
         request = request_line.decode('utf-8')
-        
-        # 1. API 데이터 요청 처리 (JSON 리턴)
+
         if "GET /api/status" in request:
-            json_response = '{"id": %d, "name": "%s", "x": %d, "y": %d}' % (
-                detected_id, detected_name, coord_x, coord_y
-            )
+            json_response = '{"id":%d,"name":"%s","x":%d,"y":%d}' % (
+                detected_id, detected_name, coord_x, coord_y)
             writer.write(b"HTTP/1.1 200 OK\r\n")
             writer.write(b"Content-Type: application/json; charset=utf-8\r\n")
             writer.write(b"Connection: close\r\n\r\n")
             writer.write(json_response.encode('utf-8'))
-            
-        # 2. 메인 페이지 요청 처리 (HTML 리턴)
         else:
             writer.write(b"HTTP/1.1 200 OK\r\n")
             writer.write(b"Content-Type: text/html; charset=utf-8\r\n")
             writer.write(b"Connection: close\r\n\r\n")
             writer.write(HTML_TEMPLATE.encode('utf-8'))
-            
+
         await writer.drain()
     except Exception as e:
         print("서버 전송 중 에러 발생:", e)
@@ -675,32 +543,26 @@ async def handle_client(reader, writer):
         writer.close()
         await writer.wait_closed()
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# [메인 실행 제어기]
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async def main():
     led = Pin("LED", Pin.OUT)
     husky = HuskyLensLibrary("I2C")
     await asyncio.sleep(0.5)
-    
-    # 사물 분류 모드로 초기화
     husky.command_request_algorthim("ALGORITHM_OBJECT_CLASSIFICATION")
     await asyncio.sleep(0.5)
 
     ip_addr = connect_wifi(SSID, PASSWORD)
     asyncio.create_task(poll_huskylens(husky, led))
-    
+
     if ip_addr:
-        print(f"📢 스마트폰/컴퓨터 주소창에 다음을 입력하세요 ➡️ http://{ip_addr}")
-        server = await asyncio.start_server(handle_client, "0.0.0.0", 80)
+        print(f"📢 브라우저 주소창에 입력 ➡️  http://{ip_addr}")
+        await asyncio.start_server(handle_client, "0.0.0.0", 80)
         while True:
             await asyncio.sleep(3600)
     else:
         while True:
-            print(f"📡 시리얼 확인용 모드 -> {detected_name} (ID: {detected_id})")
+            print(f"📡 시리얼 모드 → {detected_name} (ID: {detected_id})")
             await asyncio.sleep(1)
 
-# 시스템 진입점 설정
 try:
     asyncio.run(main())
 except KeyboardInterrupt:
